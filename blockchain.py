@@ -1,6 +1,6 @@
-from hash_util import hash_block
+from utility.hash_util import hash_block
 import json
-from verification_util import Verification
+from utility.verification_util import Verification
 from block import Block
 from transaction import Transaction
 

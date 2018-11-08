@@ -1,5 +1,4 @@
-from verification_util import Verification
-from uuid import uuid4
+from utility.verification_util import Verification
 from blockchain import Blockchain
 
 
@@ -63,5 +62,6 @@ class Node:
         print("Done")
 
 
-node = Node()
-node.listen_for_input()
+if __name__ == '__main__':
+    node = Node()
+    node.listen_for_input()
