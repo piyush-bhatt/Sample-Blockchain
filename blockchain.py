@@ -3,6 +3,7 @@ import json
 from utility.verification_util import Verification
 from block import Block
 from transaction import Transaction
+from wallet import Wallet
 
 MINING_REWARD = 10.0
 
@@ -32,12 +33,12 @@ class Blockchain:
                 blockchain = json.loads(f.readline()[:-1])
                 updated_blockchain = []
                 for block in blockchain:
-                    converted_tx = [Transaction(tx['sender'], tx['recipient'], tx['amount']) for tx in block['transactions']]
+                    converted_tx = [Transaction(tx['sender'], tx['recipient'], tx['amount'], tx['signature']) for tx in block['transactions']]
                     updated_block = Block(block['index'], block['previous_hash'], converted_tx, block['proof'], block['timestamp'])
                     updated_blockchain.append(updated_block)
                 self.blockchain = updated_blockchain
                 open_transactions = json.loads(f.readline())
-                updated_transactions = [Transaction(tx['sender'], tx['recipient'], tx['amount']) for tx in open_transactions]
+                updated_transactions = [Transaction(tx['sender'], tx['recipient'], tx['amount'], tx['signature']) for tx in open_transactions]
                 self.__open_transactions = updated_transactions
         except (IOError, IndexError):
             pass
@@ -61,8 +62,10 @@ class Blockchain:
             return None
         return self.__blockchain[-1]
 
-    def add_transaction(self, recipient, sender, amount=1.0):
-        transaction = Transaction(sender, recipient, amount)
+    def add_transaction(self, recipient, sender, signature, amount=1.0):
+        if self.host_id is None:
+            return False
+        transaction = Transaction(sender, recipient, amount, signature)
         if Verification.verify_transaction(transaction, self.get_balance):
             self.__open_transactions.append(transaction)
             self.save_data()
@@ -78,16 +81,24 @@ class Blockchain:
         return proof
 
     def mine_block(self):
-        last_block = self.__blockchain[-1]
-        last_block_hash = hash_block(last_block)
-        proof = self.proof_of_work()
-        reward_transaction = Transaction('MINING', self.host_id, MINING_REWARD)
-        open_transactions_copy = self.__open_transactions[:]
-        open_transactions_copy.append(reward_transaction)
-        block = Block(len(self.__blockchain), last_block_hash, open_transactions_copy, proof)
-        self.__blockchain.append(block)
-        self.__open_transactions.clear()
-        self.save_data()
+        if self.host_id is None:
+            print("Please add a wallet before Mining")
+            return False
+        else:
+            last_block = self.__blockchain[-1]
+            last_block_hash = hash_block(last_block)
+            proof = self.proof_of_work()
+            reward_transaction = Transaction('MINING', self.host_id, MINING_REWARD, '')
+            open_transactions_copy = self.__open_transactions[:]
+            for tx in open_transactions_copy:
+                if not Wallet.verify_transaction(tx):
+                    return False
+            open_transactions_copy.append(reward_transaction)
+            block = Block(len(self.__blockchain), last_block_hash, open_transactions_copy, proof)
+            self.__blockchain.append(block)
+            self.__open_transactions.clear()
+            self.save_data()
+            return True
 
     def get_balance(self):
         participant = self.host_id
