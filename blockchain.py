@@ -64,13 +64,13 @@ class Blockchain:
 
     def add_transaction(self, recipient, sender, signature, amount=1.0):
         if self.host_id is None:
-            return False
+            return None
         transaction = Transaction(sender, recipient, amount, signature)
-        if Verification.verify_transaction(transaction, self.get_balance):
+        if Verification.verify_transaction(transaction, self.get_wallet_balance):
             self.__open_transactions.append(transaction)
             self.save_data()
-            return True
-        return False
+            return transaction
+        return None
 
     def proof_of_work(self):
         last_block = self.__blockchain[-1]
@@ -82,8 +82,7 @@ class Blockchain:
 
     def mine_block(self):
         if self.host_id is None:
-            print("Please add a wallet before Mining")
-            return False
+            return None
         else:
             last_block = self.__blockchain[-1]
             last_block_hash = hash_block(last_block)
@@ -92,15 +91,17 @@ class Blockchain:
             open_transactions_copy = self.__open_transactions[:]
             for tx in open_transactions_copy:
                 if not Wallet.verify_transaction(tx):
-                    return False
+                    return None
             open_transactions_copy.append(reward_transaction)
             block = Block(len(self.__blockchain), last_block_hash, open_transactions_copy, proof)
             self.__blockchain.append(block)
             self.__open_transactions.clear()
             self.save_data()
-            return True
+            return block
 
-    def get_balance(self):
+    def get_wallet_balance(self):
+        if self.host_id is None:
+            return None
         participant = self.host_id
         amount_sent = 0
         amount_received = 0

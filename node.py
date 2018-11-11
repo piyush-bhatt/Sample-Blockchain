@@ -1,84 +1,142 @@
-from utility.verification_util import Verification
-from blockchain import Blockchain
+from flask import Flask, jsonify, request
+from flask_cors import CORS
 from wallet import Wallet
+from blockchain import Blockchain
+
+app = Flask(__name__)
+wallet = Wallet()
+blockchain = Blockchain(wallet.public_key)
+CORS(app)
 
 
-class Node:
-    def __init__(self):
-        self.wallet = Wallet()
-        self.blockchain = Blockchain(None)
+@app.route('/', methods=['GET'])
+def get_ui():
+    return 'This works'
 
-    @staticmethod
-    def get_transaction_value():
-        tx_recipient = input("Enter the recipient: ")
-        tx_amount = float(input("Enter the transaction amount: "))
-        return tx_recipient, tx_amount
 
-    @staticmethod
-    def get_user_choice():
-        return int(input("Your choice: "))
+@app.route('/wallet', methods=['POST'])
+def create_keys():
+    if wallet.create_keys():
+        global blockchain
+        blockchain = Blockchain(wallet.public_key)
+        response = {
+            'public_key': wallet.public_key,
+            'private_key': wallet.private_key,
+            'balance': blockchain.get_wallet_balance()
+        }
+        return jsonify(response), 201
+    else:
+        response = {
+            'message': 'Saving keys failed'
+        }
+        return jsonify(response), 500
 
-    def print_blockchain_elements(self):
-        for block in self.blockchain.blockchain:
-            print(block)
 
-    def listen_for_input(self):
-        waiting_for_input = True
-        while waiting_for_input:
-            print("*" * 20)
-            print("Please enter a value")
-            print("*" * 20)
-            print("1. Add a new transaction value")
-            print("2. Output the blockchain blocks")
-            print("3. Mine a block")
-            print("4. Output open transactions")
-            print("5. Verify Transactions")
-            print("6. Create Wallet")
-            print("7. Load Wallet")
-            print("8. Quit")
-            user_choice = self.get_user_choice()
-            if user_choice == 1:
-                if self.wallet.public_key is not None:
-                    tx_data = self.get_transaction_value()
-                    recipient, amount = tx_data
-                    signature = self.wallet.sign_transaction(self.wallet.public_key, recipient, amount)
-                    if self.blockchain.add_transaction(recipient, self.wallet.public_key, signature, amount=amount):
-                        print("Transaction Added.")
-                    else:
-                        print("Transaction Failed! Insufficient Balance")
-                else:
-                    print("Please add a wallet before adding transaction")
-            elif user_choice == 2:
-                self.print_blockchain_elements()
-            elif user_choice == 3:
-                if not self.blockchain.mine_block():
-                    print("Mining Failed")
-                else:
-                    print("New block mined.")
-            elif user_choice == 4:
-                print(self.blockchain.get_open_transactions())
-            elif user_choice == 5:
-                if Verification.verify_transactions(self.blockchain.get_open_transactions(), self.blockchain.get_balance):
-                    print("All Transactions are valid")
-                else:
-                    print("Invalid Transactions!")
-            elif user_choice == 6:
-                self.wallet.create_keys()
-                self.blockchain = Blockchain(self.wallet.public_key)
-            elif user_choice == 7:
-                self.wallet.load_keys()
-                self.blockchain = Blockchain(self.wallet.public_key)
-            elif user_choice == 8:
-                break
-            else:
-                print("Please enter a valid value.")
-            if not Verification.verify_blockchain(self.blockchain.blockchain):
-                print("Invalid Blockchain!")
-                waiting_for_input = False
-            print(f"{self.wallet.public_key} balance: {self.blockchain.get_balance():6.2f}")
-        print("Done")
+@app.route('/wallet', methods=['GET'])
+def load_keys():
+    if wallet.load_keys():
+        global blockchain
+        blockchain = Blockchain(wallet.public_key)
+        response = {
+            'public_key': wallet.public_key,
+            'private_key': wallet.private_key,
+            'balance': blockchain.get_wallet_balance()
+        }
+        return jsonify(response), 201
+    else:
+        response = {
+            'message': 'Loading keys failed'
+        }
+        return jsonify(response), 500
+
+
+@app.route('/balance', methods=['GET'])
+def get_balance():
+    balance = blockchain.get_wallet_balance()
+    if balance is not None:
+        response = {
+            'message': 'Fetching balance successful',
+            'balance': balance
+        }
+        return jsonify(response), 200
+    else:
+        response = {
+            'message': 'Fetching balance failed.',
+            'wallet_status': wallet.public_key is not None
+        }
+        return jsonify(response), 500
+
+
+@app.route('/transaction', methods=['POST'])
+def add_transaction():
+    if wallet.public_key is None:
+        response = {
+            'message': 'No wallet set up'
+        }
+        return jsonify(response), 500
+    values = request.get_json()
+    if not values:
+        response = {
+            'message': 'No data found'
+        }
+        return jsonify(response), 400
+    required_fields = ['recipient', 'amount']
+    if not all(field in values for field in required_fields):
+        response = {
+            'message': 'Required data is missing'
+        }
+        return jsonify(response), 400
+    signature = wallet.sign_transaction(wallet.public_key, values['recipient'], values['amount'])
+    transaction = blockchain.add_transaction(values['recipient'], wallet.public_key, signature, values['amount'])
+    if transaction is not None:
+        response = {
+            'message': 'Transaction added successfully',
+            'transaction': transaction.__dict__,
+            'balance': blockchain.get_wallet_balance()
+        }
+        return jsonify(response), 201
+    else:
+        response = {
+            'message': 'Transaction failed',
+            'balance': blockchain.get_wallet_balance()
+        }
+        return jsonify(response), 500
+
+
+@app.route('/transactions', methods=['GET'])
+def get_open_transactions():
+    transactions = blockchain.get_open_transactions()
+    transactions_dict = [tx.__dict__ for tx in transactions]
+    return jsonify(transactions_dict), 200
+
+
+@app.route('/mine', methods=['POST'])
+def mine_block():
+    block = blockchain.mine_block()
+    if block is not None:
+        block_dict = block.__dict__.copy()
+        block_dict['transactions'] = [tx.__dict__ for tx in block_dict['transactions']]
+        response = {
+            'message': 'Block added successfully.',
+            'block': block_dict,
+            'balance': blockchain.get_wallet_balance()
+        }
+        return jsonify(response), 201
+    else:
+        response = {
+            'message': 'Adding Block failed',
+            'wallet_status': wallet.public_key is not None
+        }
+        return jsonify(response), 500
+
+
+@app.route('/chain', methods=['GET'])
+def get_blockchain():
+    chain = blockchain.blockchain
+    chain_dict = [block.__dict__.copy() for block in chain]
+    chain_dict = [[tx.__dict__ for tx in block['transactions']] for block in chain_dict]
+    return jsonify(chain_dict), 200
 
 
 if __name__ == '__main__':
-    node = Node()
-    node.listen_for_input()
+    app.run(debug=True, port=3134)

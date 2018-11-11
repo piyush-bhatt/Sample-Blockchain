@@ -18,16 +18,20 @@ class Wallet:
                 f.write(self.public_key)
                 f.write("\n")
                 f.write(self.private_key)
+            return True
         except (IOError, IndexError):
             print("Creating wallet failed")
+            return False
 
     def load_keys(self):
         try:
             with open('wallet.txt', 'r') as f:
                 self.public_key = f.readline()[:-1]
                 self.private_key = f.readline()
+            return True
         except (IOError, IndexError):
             print("Loading wallet failed")
+            return False
 
     @staticmethod
     def generate_keys():
