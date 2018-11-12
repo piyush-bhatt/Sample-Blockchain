@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 from wallet import Wallet
 from blockchain import Blockchain
@@ -11,7 +11,7 @@ CORS(app)
 
 @app.route('/', methods=['GET'])
 def get_ui():
-    return 'This works'
+    return send_from_directory('ui', 'node.html')
 
 
 @app.route('/wallet', methods=['POST'])
@@ -22,7 +22,7 @@ def create_keys():
         response = {
             'public_key': wallet.public_key,
             'private_key': wallet.private_key,
-            'balance': blockchain.get_wallet_balance()
+            'funds': blockchain.get_wallet_balance()
         }
         return jsonify(response), 201
     else:
@@ -40,7 +40,7 @@ def load_keys():
         response = {
             'public_key': wallet.public_key,
             'private_key': wallet.private_key,
-            'balance': blockchain.get_wallet_balance()
+            'funds': blockchain.get_wallet_balance()
         }
         return jsonify(response), 201
     else:
@@ -56,7 +56,7 @@ def get_balance():
     if balance is not None:
         response = {
             'message': 'Fetching balance successful',
-            'balance': balance
+            'funds': balance
         }
         return jsonify(response), 200
     else:
@@ -92,13 +92,13 @@ def add_transaction():
         response = {
             'message': 'Transaction added successfully',
             'transaction': transaction.__dict__,
-            'balance': blockchain.get_wallet_balance()
+            'funds': blockchain.get_wallet_balance()
         }
         return jsonify(response), 201
     else:
         response = {
             'message': 'Transaction failed',
-            'balance': blockchain.get_wallet_balance()
+            'funds': blockchain.get_wallet_balance()
         }
         return jsonify(response), 500
 
@@ -119,7 +119,7 @@ def mine_block():
         response = {
             'message': 'Block added successfully.',
             'block': block_dict,
-            'balance': blockchain.get_wallet_balance()
+            'funds': blockchain.get_wallet_balance()
         }
         return jsonify(response), 201
     else:
@@ -134,7 +134,9 @@ def mine_block():
 def get_blockchain():
     chain = blockchain.blockchain
     chain_dict = [block.__dict__.copy() for block in chain]
-    chain_dict = [[tx.__dict__ for tx in block['transactions']] for block in chain_dict]
+    for block in chain_dict:
+        block['transactions'] = [
+            tx.__dict__ for tx in block['transactions']]
     return jsonify(chain_dict), 200
 
 
